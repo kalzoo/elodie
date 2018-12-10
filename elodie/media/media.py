@@ -57,6 +57,7 @@ class Media(Base):
             u'-config',
             u'"{}"'.format(constants.exiftool_config)
         ]
+        self.exif_metadata = None
 
     def get_album(self):
         """Get album from EXIF
@@ -122,6 +123,9 @@ class Media(Base):
 
         :returns: dict, or False if exiftool was not available.
         """
+        if self.exif_metadata is not None:
+            return self.exif_metadata
+
         source = self.source
         exiftool = get_exiftool()
         if(exiftool is None):
@@ -132,6 +136,7 @@ class Media(Base):
             if not metadata:
                 return False
 
+        self.exif_metadata = metadata
         return metadata
 
     def get_camera_make(self):
