@@ -52,7 +52,7 @@ class Photo(Media):
 
         exif = self.get_exiftool_attributes()
         if not exif:
-            return seconds_since_epoch
+            return None  # seconds_since_epoch
 
         # We need to parse a string from EXIF into a timestamp.
         # EXIF DateTimeOriginal and EXIF DateTime are both stored
@@ -72,6 +72,8 @@ class Photo(Media):
                         time_tuple = datetime(*dt_list).timetuple()
                         seconds_since_epoch = time.mktime(time_tuple)
                         break
+                # None of the date-taken keys were present
+                return None
             except BaseException as e:
                 log.error(e)
                 pass
@@ -93,7 +95,8 @@ class Photo(Media):
 
         # gh-4 This checks if the source file is an image.
         # It doesn't validate against the list of supported types.
-        if(imghdr.what(source) is None):
-            return False
+        # I've commented it out until https://github.com/jmathai/elodie/issues/281 is resolved.
+        # if(imghdr.what(source) is None):
+        #     return False
 
         return os.path.splitext(source)[1][1:].lower() in self.extensions

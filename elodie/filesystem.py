@@ -144,13 +144,18 @@ class FileSystem(object):
             base_name = base_name.replace('-%s' % title_sanitized, '')
             base_name = '%s-%s' % (base_name, title_sanitized)
 
-        file_name = '%s-%s.%s' % (
-            time.strftime(
-                '%Y-%m-%d_%H-%M-%S',
-                metadata['date_taken']
-            ),
-            base_name,
-            metadata['extension'])
+        if metadata['date_taken'] is not None:
+            file_name = '%s-%s.%s' % (
+                time.strftime(
+                    '%Y-%m-%d_%H-%M-%S',
+                    metadata['date_taken']
+                ),
+                base_name,
+                metadata['extension'])
+        else:
+            file_name = '%s.%s' % (
+                base_name,
+                metadata['extension'])
         return file_name.lower()
 
     def get_folder_path_definition(self):
@@ -223,6 +228,7 @@ class FileSystem(object):
         """
         path_parts = self.get_folder_path_definition()
         path = []
+        flag_undated = False
         for path_part in path_parts:
             # We support fallback values so that
             #  'album|city|"Unknown Location"
@@ -233,9 +239,16 @@ class FileSystem(object):
             for this_part in path_part:
                 part, mask = this_part
                 if part in ('date', 'day', 'month', 'year'):
-                    path.append(
-                        time.strftime(mask, metadata['date_taken'])
-                    )
+                    if metadata['date_taken'] is not None:
+                        path.append(
+                            time.strftime(mask, metadata['date_taken'])
+                        )
+                    else:
+                        if not flag_undated:  # This prevents a chain of /undated/undated/undated directories
+                            path.append(
+                                'undated'
+                            )
+                        flag_undated = True
                     break
                 elif part in ('location', 'city', 'state', 'country'):
                     place_name = geolocation.place_name(
@@ -412,5 +425,6 @@ class FileSystem(object):
         else:
             # We don't make any assumptions about time zones and
             # assume local time zone.
-            date_taken_in_seconds = time.mktime(date_taken)
-            os.utime(file_path, (time.time(), (date_taken_in_seconds)))
+            if date_taken is not None:
+                date_taken_in_seconds = time.mktime(date_taken)
+                os.utime(file_path, (time.time(), (date_taken_in_seconds)))
