@@ -11,6 +11,7 @@ are used to represent the actual files.
 from __future__ import print_function
 
 import os
+import re
 
 # load modules
 from elodie import constants
@@ -136,6 +137,8 @@ class Media(Base):
             if not metadata:
                 return False
 
+        metadata["origin"] = self.get_origin()
+
         self.exif_metadata = metadata
         return metadata
 
@@ -176,6 +179,17 @@ class Media(Base):
                 return exiftool_attributes[camera_model_key]
 
         return None
+
+    # The origin of a file is any user-set attribute, like who it's from or metadata that's not in exif, like "film"
+    # the 'origin' of a file can be set via its direct parent directory, named origin$whatever
+    def get_origin(self):
+        path, _ = os.path.split(self.source)
+        _, top_directory = os.path.split(path)
+        match = re.match('^origin\$(.+)', top_directory)
+        if match:
+            return match[1]
+        else:
+            return None
 
     def get_original_name(self):
         """Get the original name stored in EXIF.

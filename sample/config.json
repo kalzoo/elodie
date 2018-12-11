@@ -11,7 +11,7 @@
       "base_path": "C:\\Users\\Kalan\\Desktop\\SyncDir",
       "last_checked": null,
       "last_synced": null,
-      "file_path_pattern": "%Y/%M/",
+      "file_path_pattern": "%Y/%m/",
       "file_name_pattern": "%timestamp-%originalname"
     }
   ]

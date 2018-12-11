@@ -19,7 +19,7 @@ from elodie import constants
 from elodie import log
 from elodie.compatability import _decode
 from elodie.filesystem import FileSystem
-from elodie.localstorage import Db
+from elodie.manifest import Manifest
 from elodie.media.base import Base, get_all_subclasses
 from elodie.media.media import Media
 from elodie.media.text import Text
@@ -32,7 +32,7 @@ from elodie.result import Result
 FILESYSTEM = FileSystem()
 
 
-def import_file(file_path, target_config, dryrun = False):
+def import_file(file_path, target_config, manifest, dryrun=False):
 
     """Set file metadata and move it to destination.
     """
@@ -48,7 +48,7 @@ def import_file(file_path, target_config, dryrun = False):
     #     print('{"source": "%s", "destination": "%s", "error_msg": "Source cannot be in destination"}' % (_file, destination))
     #     return
 
-
+    # Creates an object of the right type, using the file extension ie .jpg -> photo
     media = Media.get_class_by_file(file_path, get_all_subclasses())
     if not media:
         log.warn('Not a supported file (%s)' % file_path)
@@ -59,11 +59,12 @@ def import_file(file_path, target_config, dryrun = False):
     #     media.set_album_from_folder()
 
     manifest_entry = FILESYSTEM.generate_manifest(file_path, target_config, media)
+    manifest.merge({manifest.checksum(file_path): manifest_entry})
 
     if dryrun:
         return manifest_entry is not None
     else:
-        result = FILESYSTEM.execute_manifest(file_path, manifest_entry, media)
+        result = FILESYSTEM.execute_manifest(file_path, manifest_entry, manifest, media)
         # if dest_path:
         #     print('%s -> %s' % (_file, dest_path))
         # if trash:
@@ -103,13 +104,20 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug)
 
     source_file_path = source["file_path"]
 
+    manifest = Manifest()
+
+    if manifest_path is not None:
+        manifest.load_from_file(manifest_path)
+
     # destination = _decode(destination)
     # destination = os.path.abspath(os.path.expanduser(destination))
 
     # Improvement over upstream: uses the generator created by Filesystem to reduce memory consumption
     for current_file in FILESYSTEM.get_all_files(source_file_path, None):
-        result = import_file(current_file, target, dryrun)
+        result = import_file(current_file, target, manifest, dryrun)
         has_errors = has_errors or not result
+
+    manifest.write() # Writes it to a timestamped file in the same directory as the original
 
     if has_errors:
         sys.exit(1)
@@ -131,7 +139,7 @@ def _generate_db(source, debug):
         log.error('Source is not a valid directory %s' % source)
         sys.exit(1)
         
-    db = Db()
+    db = Manifest()
     db.backup_hash_db()
     db.reset_hash_db()
 
@@ -150,7 +158,7 @@ def _generate_db(source, debug):
 def _verify(debug):
     constants.debug = debug
     result = Result()
-    db = Db()
+    db = Manifest()
     for checksum, file_path in db.all():
         if not os.path.isfile(file_path):
             result.append((file_path, False))

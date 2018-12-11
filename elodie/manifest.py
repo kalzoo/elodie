@@ -4,6 +4,8 @@ Methods for interacting with information Elodie caches about stored media.
 from builtins import map
 from builtins import object
 
+import collections
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -16,47 +18,51 @@ from time import strftime
 from elodie import constants
 
 
-class Db(object):
+# https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
+def deep_merge(d, u):
+    if d is None: return u
+    for k, v in u.items():
+        if isinstance(d, collections.Mapping):
+            if isinstance(v, collections.Mapping):
+                r = deep_merge(d.get(k, {}), v)
+                d[k] = r
+            else:
+                d[k] = u[k]
+        else:
+            d = {k: u[k]}
+    return d
+
+
+class Manifest(object):
 
     """A class for interacting with the JSON files created by Elodie."""
 
     def __init__(self):
-        # verify that the application directory (~/.elodie) exists,
-        #   else create it
-        if not os.path.exists(constants.application_directory):
-            os.makedirs(constants.application_directory)
+        self.entries = {}
+        self.file_path = os.getcwd()
 
-        # If the hash db doesn't exist we create it.
-        # Otherwise we only open for reading
-        if not os.path.isfile(constants.hash_db):
-            with open(constants.hash_db, 'a'):
-                os.utime(constants.hash_db, None)
+    def load_from_file(self, file_path):
+        self.file_path = file_path  # To allow re-saving afterwards
 
-        self.hash_db = {}
+        if not os.path.isfile(file_path):
+            print("Specified manifest file does not exist, creating")
+            with open(file_path, 'a'):
+                os.utime(file_path, None)
 
-        # We know from above that this file exists so we open it
-        #   for reading only.
-        with open(constants.hash_db, 'r') as f:
-            try:
-                self.hash_db = json.load(f)
-            except ValueError:
-                pass
+        with open(file_path, 'r') as f:
+            self.entries = json.load(f)
 
-        # If the location db doesn't exist we create it.
-        # Otherwise we only open for reading
-        if not os.path.isfile(constants.location_db):
-            with open(constants.location_db, 'a'):
-                os.utime(constants.location_db, None)
+    def merge(self, manifest_entry):
+        self.entries = deep_merge(self.entries, manifest_entry)
 
-        self.location_db = []
-
-        # We know from above that this file exists so we open it
-        #   for reading only.
-        with open(constants.location_db, 'r') as f:
-            try:
-                self.location_db = json.load(f)
-            except ValueError:
-                pass
+    def write(self):
+        file_path, file_name = os.path.split(self.file_path)
+        name, ext = os.path.splitext(file_name)
+        write_path = os.path.join(file_path, '_'.join([name, datetime.utcnow().isoformat(), ext]))
+        print("Writing manifest to {}".format(write_path))
+        with open(write_path) as f:
+            f.write(json.dump(self.entries))
+        print("Manifest written.")
 
     def add_hash(self, key, value, write=False):
         """Add a hash to the hash db.
@@ -68,30 +74,6 @@ class Db(object):
         self.hash_db[key] = value
         if(write is True):
             self.update_hash_db()
-
-    # Location database
-    # Currently quite simple just a list of long/lat pairs with a name
-    # If it gets many entries a lookup might take too long and a better
-    # structure might be needed. Some speed up ideas:
-    # - Sort it and inter-half method can be used
-    # - Use integer part of long or lat as key to get a lower search list
-    # - Cache a small number of lookups, photos are likely to be taken in
-    #   clusters around a spot during import.
-    def add_location(self, latitude, longitude, place, write=False):
-        """Add a location to the database.
-
-        :param float latitude: Latitude of the location.
-        :param float longitude: Longitude of the location.
-        :param str place: Name for the location.
-        :param bool write: If true, write the location db to disk.
-        """
-        data = {}
-        data['lat'] = latitude
-        data['long'] = longitude
-        data['name'] = place
-        self.location_db.append(data)
-        if(write is True):
-            self.update_location_db()
 
     def backup_hash_db(self):
         """Backs up the hash db."""
@@ -137,50 +119,6 @@ class Db(object):
         """
         if(self.check_hash(key) is True):
             return self.hash_db[key]
-        return None
-
-    def get_location_name(self, latitude, longitude, threshold_m):
-        """Find a name for a location in the database.
-
-        :param float latitude: Latitude of the location.
-        :param float longitude: Longitude of the location.
-        :param int threshold_m: Location in the database must be this close to
-            the given latitude and longitude.
-        :returns: str, or None if a matching location couldn't be found.
-        """
-        last_d = sys.maxsize
-        name = None
-        for data in self.location_db:
-            # As threshold is quite small use simple math
-            # From http://stackoverflow.com/questions/15736995/how-can-i-quickly-estimate-the-distance-between-two-latitude-longitude-points  # noqa
-            # convert decimal degrees to radians
-
-            lon1, lat1, lon2, lat2 = list(map(
-                radians,
-                [longitude, latitude, data['long'], data['lat']]
-            ))
-
-            r = 6371000  # radius of the earth in m
-            x = (lon2 - lon1) * cos(0.5 * (lat2 + lat1))
-            y = lat2 - lat1
-            d = r * sqrt(x * x + y * y)
-            # Use if closer then threshold_km reuse lookup
-            if(d <= threshold_m and d < last_d):
-                name = data['name']
-            last_d = d
-
-        return name
-
-    def get_location_coordinates(self, name):
-        """Get the latitude and longitude for a location.
-
-        :param str name: Name of the location.
-        :returns: tuple(float), or None if the location wasn't in the database.
-        """
-        for data in self.location_db:
-            if data['name'] == name:
-                return (data['lat'], data['long'])
-
         return None
 
     def all(self):

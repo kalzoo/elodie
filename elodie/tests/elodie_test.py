@@ -18,7 +18,7 @@ import helper
 elodie = load_source('elodie', os.path.abspath('{}/../../elodie.py'.format(os.path.dirname(os.path.realpath(__file__)))))
 
 from elodie.config import load_config
-from elodie.localstorage import Db
+from elodie.manifest import Manifest
 from elodie.media.audio import Audio
 from elodie.media.photo import Photo
 from elodie.media.text import Text
@@ -541,7 +541,7 @@ def test_regenerate_valid_source():
     helper.reset_dbs()
     runner = CliRunner()
     result = runner.invoke(elodie._generate_db, ['--source', folder])
-    db = Db()
+    db = Manifest()
     helper.restore_dbs()
 
     shutil.rmtree(folder)
@@ -560,7 +560,7 @@ def test_regenerate_valid_source_with_invalid_files():
     helper.reset_dbs()
     runner = CliRunner()
     result = runner.invoke(elodie._generate_db, ['--source', folder])
-    db = Db()
+    db = Manifest()
     helper.restore_dbs()
 
     shutil.rmtree(folder)

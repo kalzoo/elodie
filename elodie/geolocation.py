@@ -16,7 +16,7 @@ import urllib.error
 from elodie.config import load_config
 from elodie import constants
 from elodie import log
-from elodie.localstorage import Db
+from elodie.manifest import Manifest
 
 __KEY__ = None
 __DEFAULT_LOCATION__ = 'Unknown Location'
@@ -24,7 +24,7 @@ __DEFAULT_LOCATION__ = 'Unknown Location'
 
 def coordinates_by_name(name):
     # Try to get cached location first
-    db = Db()
+    db = Manifest()
     cached_coordinates = db.get_location_coordinates(name)
     if(cached_coordinates is not None):
         return {
@@ -127,7 +127,7 @@ def place_name(lat, lon):
         lon = float(lon)
 
     # Try to get cached location first
-    db = Db()
+    db = Manifest()
     # 3km distace radious for a match
     cached_place_name = db.get_location_name(lat, lon, 3000)
     # We check that it's a dict to coerce an upgrade of the location

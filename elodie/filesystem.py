@@ -15,7 +15,7 @@ from elodie import compatability
 # from elodie import geolocation
 from elodie import log
 # from elodie.config import load_config
-from elodie.localstorage import Db
+from elodie.manifest import Manifest
 from elodie.media.base import Base, get_all_subclasses
 
 
@@ -30,7 +30,7 @@ class FileSystem(object):
             'full_path': '%date/'
         }
         self.cached_folder_path_definition = None
-        self.default_parts = ['album', 'city', 'state', 'country']
+        self.default_parts = ['album', 'city', 'state', 'country', 'origin']
 
     def create_directory(self, directory_path):
         """Create a directory if it does not already exist.
@@ -95,7 +95,7 @@ class FileSystem(object):
         """
         return os.getcwd()
 
-    def get_file_name(self, media):
+    def get_file_name(self, metadata, target_config):
         """Generate file name for a photo or video using its metadata.
 
         We use an ISO8601-like format for the file name prefix. Instead of
@@ -107,17 +107,17 @@ class FileSystem(object):
             :class:`~elodie.media.video.Video`
         :returns: str or None for non-photo or non-videos
         """
-        if(not media.is_valid()):
-            return None
-
-        metadata = media.get_metadata()
-        if(metadata is None):
+        # if(not media.is_valid()):
+        #     return None
+        #
+        # metadata = media.get_metadata()
+        if metadata is None:
             return None
 
         # First we check if we have metadata['original_name'].
         # We have to do this for backwards compatibility because
         #   we original did not store this back into EXIF.
-        if('original_name' in metadata and metadata['original_name']):
+        if 'original_name' in metadata and metadata['original_name']:
             base_name = os.path.splitext(metadata['original_name'])[0]
         else:
             # If the file has EXIF title we use that in the file name
@@ -142,21 +142,20 @@ class FileSystem(object):
             base_name = base_name.replace('-%s' % title_sanitized, '')
             base_name = '%s-%s' % (base_name, title_sanitized)
 
-        if metadata['date_taken'] is not None:
-            file_name = '%s-%s.%s' % (
-                time.strftime(
-                    '%Y-%m-%d_%H-%M-%S',
-                    metadata['date_taken']
-                ),
-                base_name,
-                metadata['extension'])
-        else:
-            file_name = '%s.%s' % (
-                base_name,
-                metadata['extension'])
-        return file_name.lower()
+        file_name_parts = []
 
-    def get_folder_path_definition(self):
+        if metadata['date_taken'] is not None:
+            file_name_parts.append(time.strftime('%Y-%m-%d_%H-%M-%S', metadata['date_taken']))
+
+        if metadata.get("origin", None) is not None:
+            file_name_parts.append(metadata['origin'])
+
+        file_name_parts.append(base_name)
+        file_name_parts.append(metadata['extension'])
+
+        return '-'.join(file_name_parts).lower()
+
+    def get_folder_path_definition(self, pattern):
         """Returns a list of folder definitions.
 
         Each element in the list represents a folder.
@@ -175,36 +174,36 @@ class FileSystem(object):
         """
         # If we've done this already then return it immediately without
         # incurring any extra work
+        # TODO: This needs to be adapted for multiple targets
         if self.cached_folder_path_definition is not None:
             return self.cached_folder_path_definition
 
-        config = load_config()
-
         # If Directory is in the config we assume full_path and its
         #  corresponding values (date, location) are also present
-        config_directory = self.default_folder_path_definition
-        if('Directory' in config):
-            config_directory = config['Directory']
+        # config_directory = self.default_folder_path_definition
+        # if('Directory' in config):
+        #     config_directory = config['Directory']
 
         # Find all subpatterns of full_path that map to directories.
         #  I.e. %foo/%bar => ['foo', 'bar']
         #  I.e. %foo/%bar|%example|"something" => ['foo', 'bar|example|"something"']
         path_parts = re.findall(
                          '(\%[^/]+)',
-                         config_directory['full_path']
+                         pattern
                      )
 
         if not path_parts or len(path_parts) == 0:
-            return self.default_folder_path_definition
+            raise Exception("Bad folder path definition: {}".format(pattern))
+            # return self.default_folder_path_definition
 
         self.cached_folder_path_definition = []
         for part in path_parts:
             part = part.replace('%', '')
-            if part in config_directory:
-                self.cached_folder_path_definition.append(
-                    [(part, config_directory[part])]
-                )
-            elif part in self.default_parts:
+            # if part in config_directory:
+            #     self.cached_folder_path_definition.append(
+            #         [(part, config_directory[part])]
+            #     )
+            if part in self.default_parts:
                 self.cached_folder_path_definition.append(
                     [(part, '')]
                 )
@@ -212,19 +211,19 @@ class FileSystem(object):
                 this_part = []
                 for p in part.split('|'):
                     this_part.append(
-                        (p, config_directory[p] if p in config_directory else '')
+                        (p, "%{}".format(p))
                     )
                 self.cached_folder_path_definition.append(this_part)
 
         return self.cached_folder_path_definition
 
-    def get_folder_path(self, metadata):
+    def get_folder_path(self, metadata, target_config):
         """Given a media's metadata this function returns the folder path as a string.
 
         :param metadata dict: Metadata dictionary.
         :returns: str
         """
-        path_parts = self.get_folder_path_definition()
+        path_parts = self.get_folder_path_definition(target_config["file_path_pattern"])
         path = []
         flag_undated = False
         for path_part in path_parts:
@@ -236,7 +235,7 @@ class FileSystem(object):
             #  Unknown Location - when neither an album nor location exist
             for this_part in path_part:
                 part, mask = this_part
-                if part in ('date', 'day', 'month', 'year'):
+                if part in ('date', 'day', 'month', 'year', 'Y', 'm', 'd'):
                     if metadata['date_taken'] is not None:
                         path.append(
                             time.strftime(mask, metadata['date_taken'])
@@ -248,21 +247,7 @@ class FileSystem(object):
                             )
                         flag_undated = True
                     break
-                elif part in ('location', 'city', 'state', 'country'):
-                    place_name = geolocation.place_name(
-                        metadata['latitude'],
-                        metadata['longitude']
-                    )
-
-                    location_parts = re.findall('(%[^%]+)', mask)
-                    parsed_folder_name = self.parse_mask_for_location(
-                        mask,
-                        location_parts,
-                        place_name,
-                    )
-                    path.append(parsed_folder_name)
-                    break
-                elif part in ('album', 'camera_make', 'camera_model'):
+                elif part in ('album', 'camera_make', 'camera_model', 'origin'):
                     if metadata[part]:
                         path.append(metadata[part])
                         break
@@ -271,73 +256,30 @@ class FileSystem(object):
 
         return os.path.join(*path)
 
-    def parse_mask_for_location(self, mask, location_parts, place_name):
-        """Takes a mask for a location and interpolates the actual place names.
-
-        Given these parameters here are the outputs.
-
-        mask=%city
-        location_parts=[('%city','%city','city')]
-        place_name={'city': u'Sunnyvale'}
-        output=Sunnyvale
-
-        mask=%city-%state
-        location_parts=[('%city-','%city','city'), ('%state','%state','state')]
-        place_name={'city': u'Sunnyvale', 'state': u'California'}
-        output=Sunnyvale-California
-
-        mask=%country
-        location_parts=[('%country','%country','country')]
-        place_name={'default': u'Sunnyvale', 'city': u'Sunnyvale'}
-        output=Sunnyvale
-
-
-        :param str mask: The location mask in the form of %city-%state, etc
-        :param list location_parts: A list of tuples in the form of
-            [('%city-', '%city', 'city'), ('%state', '%state', 'state')]
-        :param dict place_name: A dictionary of place keywords and names like
-            {'default': u'California', 'state': u'California'}
-        :returns: str
-        """
-        found = False
-        folder_name = mask
-        for loc_part in location_parts:
-            # We assume the search returns a tuple of length 2.
-            # If not then it's a bad mask in config.ini.
-            # loc_part = '%country-random'
-            # component_full = '%country-random'
-            # component = '%country'
-            # key = 'country
-            component_full, component, key = re.search(
-                '((%([a-z]+))[^%]*)',
-                loc_part
-            ).groups()
-
-            if(key in place_name):
-                found = True
-                replace_target = component
-                replace_with = place_name[key]
-            else:
-                replace_target = component_full
-                replace_with = ''
-
-            folder_name = folder_name.replace(
-                replace_target,
-                replace_with,
-            )
-
-        if(not found and folder_name == ''):
-            folder_name = place_name['default']
-
-        return folder_name
-
     def generate_manifest(self, file_path, target_config, media):
-        print("Generating manifest: {}".format(file_path))
-        return {}
+        log.info("Generating manifest: {}".format(file_path))
+        metadata = media.get_metadata()
+        target_manifest = metadata.copy()
+
+        target_manifest["file_path"] = self.get_folder_path(metadata, target_config)
+        target_manifest["file_name"] = self.get_file_name(metadata, target_config)
+
+        return {"targets": [target_manifest]}
 
     def execute_manifest(self, file_path, manifest_entry):
-        print("executing manifest: {}".format(file_path))
-        return True
+        log.info("executing manifest: {}".format(file_path))
+        # Check if file is already present at the target.
+        # If it is, return
+        destination = os.path.join(manifest_entry["file_path"], manifest_entry["file_name"])
+        if os.path.exists(destination):
+            return True
+        else:
+            try:
+                shutil.copy(file_path, destination)
+                return True
+            except Exception as e:
+                log.error("Exception copying {}: {}".format(file_path, e))
+                return False
 
     def process_file(self, _file, destination, media, manifest, **kwargs):
         move = False
