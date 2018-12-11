@@ -74,7 +74,7 @@ class Base(object):
     def get_camera_model(self):
         return None
 
-    def get_metadata(self, update_cache=False):
+    def get_metadata(self, metadata_dict, update_cache=False):
         """Get a dictionary of metadata for any file.
 
         All keys will be present and have a value of None if not obtained.
@@ -86,6 +86,12 @@ class Base(object):
 
         if(isinstance(self.metadata, dict) and update_cache is False):
             return self.metadata
+
+        # Check the batch-retrieved attributes and see if the metadata is there.
+        #   If present, memoize it to the same property as the exiftool fetcher to prevent refetch
+        #   and enable all the get_*() methods.
+        if metadata_dict is not None and self.source in metadata_dict:
+            self.exif_metadata = metadata_dict[self.source]
 
         source = self.source
 

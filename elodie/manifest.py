@@ -9,6 +9,7 @@ from datetime import datetime
 import hashlib
 import json
 import os
+import re
 import sys
 
 from math import radians, cos, sqrt
@@ -39,7 +40,7 @@ class Manifest(object):
 
     def __init__(self):
         self.entries = {}
-        self.file_path = os.getcwd()
+        self.file_path = os.path.join(os.getcwd(), 'manifest.json')
 
     def load_from_file(self, file_path):
         self.file_path = file_path  # To allow re-saving afterwards
@@ -55,13 +56,15 @@ class Manifest(object):
     def merge(self, manifest_entry):
         self.entries = deep_merge(self.entries, manifest_entry)
 
+    # TODO: Cut out any date that's already there
     def write(self):
         file_path, file_name = os.path.split(self.file_path)
         name, ext = os.path.splitext(file_name)
-        write_path = os.path.join(file_path, '_'.join([name, datetime.utcnow().isoformat(), ext]))
+        write_name = re.sub(":", "", "{}{}".format('_'.join([name, datetime.utcnow().isoformat()]), ext))
+        write_path = os.path.join(file_path, write_name)
         print("Writing manifest to {}".format(write_path))
-        with open(write_path) as f:
-            f.write(json.dump(self.entries))
+        with open(write_path, 'w') as f:
+            json.dump(self.entries, f, indent=2)
         print("Manifest written.")
 
     def add_hash(self, key, value, write=False):

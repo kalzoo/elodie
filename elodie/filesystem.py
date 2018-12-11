@@ -151,9 +151,9 @@ class FileSystem(object):
             file_name_parts.append(metadata['origin'])
 
         file_name_parts.append(base_name)
-        file_name_parts.append(metadata['extension'])
+        file_name_parts
 
-        return '-'.join(file_name_parts).lower()
+        return "{}.{}".format('-'.join(file_name_parts), metadata['extension']).lower()
 
     def get_folder_path_definition(self, pattern):
         """Returns a list of folder definitions.
@@ -256,9 +256,9 @@ class FileSystem(object):
 
         return os.path.join(*path)
 
-    def generate_manifest(self, file_path, target_config, media):
+    def generate_manifest(self, file_path, target_config, metadata_dict, media):
         log.info("Generating manifest: {}".format(file_path))
-        metadata = media.get_metadata()
+        metadata = media.get_metadata(metadata_dict)
         target_manifest = metadata.copy()
 
         target_manifest["file_path"] = self.get_folder_path(metadata, target_config)

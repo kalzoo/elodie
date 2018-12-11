@@ -11,3 +11,4 @@ build/**
 **/*.rw2
 .idea
 /venv
+manifest*json
