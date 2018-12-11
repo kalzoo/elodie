@@ -11,9 +11,6 @@ are used to represent the actual files.
 from __future__ import print_function
 
 import os
-import piexif
-from PIL import Image
-from PIL.ExifTags import TAGS
 import re
 
 # load modules
@@ -121,34 +118,6 @@ class Media(Base):
                 return this_coordinate * direction_multiplier
 
         return None
-
-    def get_exif_attributes(self):
-        if self.exif_metadata is not None:
-            return self.exif_metadata
-
-        # exif_dict = piexif.load(self.source)
-
-        # print(exif_dict)
-        # print(piexif.ImageIFD.__dict__)
-
-        # print(f.info['exif'])
-
-        try:
-            img = Image.open(self.source)
-
-            self.exif_metadata = {
-                TAGS[k]: v
-                for k, v in img._getexif().items()
-                if (k in TAGS and TAGS[k] not in ("MakerNote", "UserComment"))
-            }
-
-            print(self.exif_metadata)
-            return self.exif_metadata
-
-        except AttributeError: # Doesn't have exif data
-            return {}
-        except OSError:  # Movie type
-            return {}
 
     def get_exiftool_attributes(self):
         # return self.get_exif_attributes()
