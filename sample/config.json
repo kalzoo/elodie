@@ -1,0 +1,18 @@
+{
+  "sources": [
+    {
+      "file_path":  "C:\\Users\\Kalan\\Desktop\\TrialDir",
+      "last_scanned": null
+    }
+  ],
+  "targets": [
+    {
+      "type": "file",
+      "base_path": "C:\\Users\\Kalan\\Desktop\\SyncDir",
+      "last_checked": null,
+      "last_synced": null,
+      "file_path_pattern": "%Y/%M/",
+      "file_name_pattern": "%timestamp-%originalname"
+    }
+  ]
+}

@@ -5,7 +5,7 @@ import re
 import sys
 
 from elodie import constants
-from elodie import geolocation
+# from elodie import geolocation
 from elodie import log
 from elodie.compatability import _decode
 from elodie.filesystem import FileSystem

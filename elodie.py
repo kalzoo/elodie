@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-from __future__ import print_function
 import os
 import re
 import sys
@@ -15,8 +14,8 @@ from elodie.dependencies import verify_dependencies
 if not verify_dependencies():
     sys.exit(1)
 
+from elodie.config import Config
 from elodie import constants
-from elodie import geolocation
 from elodie import log
 from elodie.compatability import _decode
 from elodie.filesystem import FileSystem
@@ -33,90 +32,84 @@ from elodie.result import Result
 FILESYSTEM = FileSystem()
 
 
-def import_file(_file, destination, album_from_folder, trash, allow_duplicates):
-
-    _file = _decode(_file)
-    destination = _decode(destination)
+def import_file(file_path, target_config, dryrun = False):
 
     """Set file metadata and move it to destination.
     """
-    if not os.path.exists(_file):
-        log.warn('Could not find %s' % _file)
+    if not os.path.exists(file_path):
+        log.warn('Could not find %s' % file_path)
         print('{"source":"%s", "error_msg":"Could not find %s"}' % \
-            (_file, _file))
+            (file_path, file_path))
         return
+
     # Check if the source, _file, is a child folder within destination
-    elif destination.startswith(os.path.abspath(os.path.dirname(_file))+os.sep):
-        print('{"source": "%s", "destination": "%s", "error_msg": "Source cannot be in destination"}' % (_file, destination))
-        return
+    #   .... this is not the right time to be checking for that. Lots of unnecessary checks
+    # elif destination.startswith(os.path.abspath(os.path.dirname(_file))+os.sep):
+    #     print('{"source": "%s", "destination": "%s", "error_msg": "Source cannot be in destination"}' % (_file, destination))
+    #     return
 
 
-    media = Media.get_class_by_file(_file, get_all_subclasses())
+    media = Media.get_class_by_file(file_path, get_all_subclasses())
     if not media:
-        log.warn('Not a supported file (%s)' % _file)
-        print('{"source":"%s", "error_msg":"Not a supported file"}' % _file)
+        log.warn('Not a supported file (%s)' % file_path)
+        print('{"source":"%s", "error_msg":"Not a supported file"}' % file_path)
         return
 
-    if album_from_folder:
-        media.set_album_from_folder()
+    # if album_from_folder:
+    #     media.set_album_from_folder()
 
-    dest_path = FILESYSTEM.process_file(_file, destination,
-        media, allowDuplicate=allow_duplicates, move=False)
-    if dest_path:
-        print('%s -> %s' % (_file, dest_path))
-    if trash:
-        send2trash(_file)
+    manifest_entry = FILESYSTEM.generate_manifest(file_path, target_config, media)
 
-    return dest_path or None
+    if dryrun:
+        return manifest_entry is not None
+    else:
+        result = FILESYSTEM.execute_manifest(file_path, manifest_entry, media)
+        # if dest_path:
+        #     print('%s -> %s' % (_file, dest_path))
+        # if trash:
+        #     send2trash(_file)
+
+        return result
 
 
 @click.command('import')
-@click.option('--destination', type=click.Path(file_okay=False),
-              required=True, help='Copy imported files into this directory.')
 @click.option('--source', type=click.Path(file_okay=False),
-              help='Import files from this directory, if specified.')
-@click.option('--file', type=click.Path(dir_okay=False),
-              help='Import this file, if specified.')
-@click.option('--album-from-folder', default=False, is_flag=True,
-              help="Use images' folders as their album names.")
-@click.option('--trash', default=False, is_flag=True,
-              help='After copying files, move the old files to the trash.')
+              help='Add an optional source directory to the configuration.')
+@click.option('-c', '--config', 'config_path', type=click.Path(file_okay=True),
+              required=True, help='Import configuration file.')
+@click.option('-m', '--manifest', 'manifest_path', type=click.Path(file_okay=False),
+              help='The database/manifest used to store file sync information.')
+# @click.option('--trash', default=False, is_flag=True,
+#               help='After copying files, move the old files to the trash.')
 @click.option('--allow-duplicates', default=False, is_flag=True,
               help='Import the file even if it\'s already been imported.')
+@click.option('--dryrun', default=False, is_flag=True,
+              help="Don't move files or save the manifest; just print the manifest to terminal")
 @click.option('--debug', default=False, is_flag=True,
               help='Override the value in constants.py with True.')
-@click.argument('paths', nargs=-1, type=click.Path())
-def _import(destination, source, file, album_from_folder, trash, allow_duplicates, debug, paths):
+# @click.argument('paths', nargs=-1, type=click.Path())
+def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug):
     """Import files or directories by reading their EXIF and organizing them accordingly.
     """
     constants.debug = debug
     has_errors = False
     result = Result()
 
-    destination = _decode(destination)
-    destination = os.path.abspath(os.path.expanduser(destination))
+    # Load the configuration from the json file.
+    config = Config().load_from_file(config_path)
 
-    files = set()
-    paths = set(paths)
-    if source:
-        source = _decode(source)
-        paths.add(source)
-    if file:
-        paths.add(file)
-    for path in paths:
-        path = os.path.expanduser(path)
-        if os.path.isdir(path):
-            files.update(FILESYSTEM.get_all_files(path, None))
-        else:
-            files.add(path)
+    source = config["sources"][0]  # For now, only one.
+    target = config["targets"][0]  # For now, only one target allowed...but data structure allows more
 
-    for current_file in files:
-        dest_path = import_file(current_file, destination, album_from_folder,
-                    trash, allow_duplicates)
-        result.append((current_file, dest_path))
-        has_errors = has_errors is True or not dest_path
+    source_file_path = source["file_path"]
 
-    result.write()
+    # destination = _decode(destination)
+    # destination = os.path.abspath(os.path.expanduser(destination))
+
+    # Improvement over upstream: uses the generator created by Filesystem to reduce memory consumption
+    for current_file in FILESYSTEM.get_all_files(source_file_path, None):
+        result = import_file(current_file, target, dryrun)
+        has_errors = has_errors or not result
 
     if has_errors:
         sys.exit(1)

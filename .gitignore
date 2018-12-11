@@ -9,3 +9,5 @@ build/**
 **/*.dng
 **/*.nef
 **/*.rw2
+.idea
+/venv

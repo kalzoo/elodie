@@ -1,19 +1,23 @@
-"""Load config file as a singleton."""
-from configparser import RawConfigParser
-from os import path
-
-from elodie import constants
-
-config_file = '%s/config.ini' % constants.application_directory
+import json
+import os
 
 
-def load_config():
-    if hasattr(load_config, "config"):
-        return load_config.config
+class Config:
 
-    if not path.exists(config_file):
-        return {}
+    def __init__(self):
+        self.fields = {}
 
-    load_config.config = RawConfigParser()
-    load_config.config.read(config_file)
-    return load_config.config
+    def load_from_file(self, path):
+        if not os.path.isfile(path):
+            raise Exception("Configuration file does not exist!")
+        _, extension = os.path.splitext(path)
+        if extension != ".json":
+            raise Exception("Configuration file must be JSON. Got: {}".format(extension))
+
+        with open(path, 'r') as f:
+            self.fields = json.load(f)
+
+        return self.fields
+
+
+

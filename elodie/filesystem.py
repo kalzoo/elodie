@@ -12,9 +12,9 @@ import shutil
 import time
 
 from elodie import compatability
-from elodie import geolocation
+# from elodie import geolocation
 from elodie import log
-from elodie.config import load_config
+# from elodie.config import load_config
 from elodie.localstorage import Db
 from elodie.media.base import Base, get_all_subclasses
 
@@ -27,9 +27,7 @@ class FileSystem(object):
         self.default_folder_path_definition = {
             'date': '%Y-%m-%b',
             'location': '%city',
-            'full_path': '%date/%album|%location|"{}"'.format(
-                            geolocation.__DEFAULT_LOCATION__
-                         ),
+            'full_path': '%date/'
         }
         self.cached_folder_path_definition = None
         self.default_parts = ['album', 'city', 'state', 'country']
@@ -333,7 +331,15 @@ class FileSystem(object):
 
         return folder_name
 
-    def process_file(self, _file, destination, media, **kwargs):
+    def generate_manifest(self, file_path, target_config, media):
+        print("Generating manifest: {}".format(file_path))
+        return {}
+
+    def execute_manifest(self, file_path, manifest_entry):
+        print("executing manifest: {}".format(file_path))
+        return True
+
+    def process_file(self, _file, destination, media, manifest, **kwargs):
         move = False
         if('move' in kwargs):
             move = kwargs['move']
@@ -342,11 +348,13 @@ class FileSystem(object):
         if('allowDuplicate' in kwargs):
             allow_duplicate = kwargs['allowDuplicate']
 
-        if(not media.is_valid()):
-            print('%s is not a valid media file. Skipping...' % _file)
-            return
+        # This has no value for me
+        # if(not media.is_valid()):
+        #     print('%s is not a valid media file. Skipping...' % _file)
+        #     return
 
-        media.set_original_name()
+        # I don't want anything touching the originals
+        # media.set_original_name()
         metadata = media.get_metadata()
 
         directory_name = self.get_folder_path(metadata)
@@ -355,7 +363,7 @@ class FileSystem(object):
         file_name = self.get_file_name(media)
         dest_path = os.path.join(dest_directory, file_name)
 
-        db = Db()
+        db = manifest
         checksum = db.checksum(_file)
         if(checksum is None):
             log.info('Could not get checksum for %s. Skipping...' % _file)
