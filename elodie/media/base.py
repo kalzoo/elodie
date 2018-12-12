@@ -48,6 +48,9 @@ class Base(object):
         """
         return None
 
+    def get_date_taken(self):
+        return None
+
     def get_file_path(self):
         """Get the full path to the video.
 
@@ -163,8 +166,11 @@ class Base(object):
 
         :returns: bool
         """
-        source = self.source
-        return os.path.splitext(source)[1][1:].lower() in self.extensions
+        # source = self.source
+        # return os.path.splitext(source)[1][1:].lower() in self.extensions
+
+        # Why are we checking this after it was already part of the FileSystem scrape?
+        return True
 
     def reset_cache(self):
         """Resets any internal cache
@@ -242,7 +248,7 @@ class Base(object):
                 if(extension in i.extensions):
                     return i(_file)
 
-        return None
+        return Base(_file)
 
     @classmethod
     def get_valid_extensions(cls):

@@ -36,7 +36,7 @@ from elodie.external.pyexiftool import ExifTool
 FILESYSTEM = FileSystem()
 
 
-def import_file(file_path, config, manifest, metadata_dict, dryrun=False):
+def import_file(file_path, config, manifest, metadata_dict, allow_duplicates=False, dryrun=False):
 
     """Set file metadata and move it to destination.
     """
@@ -65,10 +65,17 @@ def import_file(file_path, config, manifest, metadata_dict, dryrun=False):
     # if album_from_folder:
     #     media.set_album_from_folder()
 
-    manifest_entry = FILESYSTEM.generate_manifest(file_path, target, metadata_dict, media)
-    manifest.merge({manifest.checksum(file_path): manifest_entry})
+    checksum = manifest.checksum(file_path)
+
+    if not allow_duplicates and checksum in manifest.entries:
+        log.info("[ ] File {} already present in manifest; allow_duplicates is false; skipping".format(file_path))
+        return True
+    else:
+        manifest_entry = FILESYSTEM.generate_manifest(file_path, target, metadata_dict, media)
+        manifest.merge({checksum: manifest_entry})
 
     if dryrun:
+        log.info("Generated manifest: {}".format(file_path))
         return manifest_entry is not None
     else:
         result = FILESYSTEM.execute_manifest(file_path, manifest_entry, target_base_path)
@@ -120,6 +127,8 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
     if manifest_path is not None:
         manifest.load_from_file(manifest_path)
 
+    original_manifest_key_count = len(manifest)
+
     # destination = _decode(destination)
     # destination = os.path.abspath(os.path.expanduser(destination))
 
@@ -134,10 +143,12 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
     # TODO Next: (Working here): minor rewrite to use this^ to  prevent crashing on my HD
 
     file_generator = FILESYSTEM.get_all_files(source_file_path, None)
+    source_file_count = 0
 
     while True:
         file_batch = list(itertools.islice(file_generator, constants.exiftool_batch_size))
         if len(file_batch) == 0: break
+        source_file_count += len(file_batch)
         with ExifTool(addedargs=exiftool_addedargs) as et:
             metadata_list = et.get_metadata_batch(file_batch)
             if not metadata_list:
@@ -145,10 +156,24 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
             # Key on the filename to make for easy access,
             metadata_dict = dict((os.path.abspath(el["SourceFile"]), el) for el in metadata_list)
         for current_file in file_batch:
-            result = import_file(current_file, config, manifest, metadata_dict, dryrun)
+            try:
+                result = import_file(current_file, config, manifest, metadata_dict, dryrun=dryrun, allow_duplicates=allow_duplicates)
+            except Exception as e:
+                log.warn("[!] Error importing {}: {}".format(current_file, e))
+                result = False
             has_errors = has_errors or not result
 
-    manifest.write(indent=indent_manifest, overwrite=overwrite_manifest)  # Writes it to a timestamped file in the same directory as the original
+    manifest.write(indent=indent_manifest, overwrite=overwrite_manifest)
+
+    manifest_key_count = len(manifest)
+
+    try:
+        print("Statistics:")
+        print("Source: File Count {}".format(source_file_count))
+        print("Manifest: New Hashes {}".format(manifest_key_count - original_manifest_key_count))
+        print("Manifest: Total Hashes {}".format(manifest_key_count))
+    except Exception as e:
+        log.error("[!] Error generating statistics: {}".format(e))
 
     if has_errors:
         sys.exit(1)

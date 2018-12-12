@@ -74,6 +74,9 @@ class Manifest(object):
                 json.dump(self.entries, f, separators=(',', ':'))
         print("Manifest written.")
 
+    def __len__(self):
+        return len(self.entries)
+
     def add_hash(self, key, value, write=False):
         """Add a hash to the hash db.
 

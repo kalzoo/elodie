@@ -68,11 +68,12 @@ class FileSystem(object):
 
         return False
 
-    def get_all_files(self, path, extensions=None):
+    def get_all_files(self, path, extensions=None, check_extensions=False):
         """Recursively get all files which match a path and extension.
 
         :param str path string: Path to start recursive file listing
         :param tuple(str) extensions: File extensions to include (whitelist)
+        :param check_extensions boolean: whether to check extensions or to just get files regardless
         :returns: generator
         """
         # If extensions is None then we get all supported extensions
@@ -84,8 +85,13 @@ class FileSystem(object):
 
         for dirname, dirnames, filenames in os.walk(path):
             for filename in filenames:
-                # If file extension is in `extensions` then append to the list
-                if os.path.splitext(filename)[1][1:].lower() in extensions:
+                if check_extensions:
+                    # If file extension is in `extensions` then append to the list
+                    if os.path.splitext(filename)[1][1:].lower() in extensions:
+                        yield os.path.join(dirname, filename)
+                    else:
+                        log.warn("Ignored extension found at {}".format(os.path.join(dirname, filename)))
+                else:
                     yield os.path.join(dirname, filename)
 
     def get_current_directory(self):
@@ -259,7 +265,6 @@ class FileSystem(object):
         return os.path.join(*path)
 
     def generate_manifest(self, file_path, target_config, metadata_dict, media):
-        log.info("Generating manifest: {}".format(file_path))
         metadata = media.get_metadata(metadata_dict)
         metadata_entry = {
             "sources": {
@@ -283,7 +288,6 @@ class FileSystem(object):
 
     # TODO: check that the file found at destination has the expected checksum
     def execute_manifest(self, source_path, manifest_entry, base_path):
-        log.info("executing manifest: {}".format(source_path))
         # Check if file is already present at the target.
         # If it is, return
         target_manifest = manifest_entry["target"]
