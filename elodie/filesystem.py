@@ -281,19 +281,27 @@ class FileSystem(object):
 
         return metadata_entry
 
-    def execute_manifest(self, file_path, manifest_entry):
-        log.info("executing manifest: {}".format(file_path))
+    # TODO: check that the file found at destination has the expected checksum
+    def execute_manifest(self, source_path, manifest_entry, base_path):
+        log.info("executing manifest: {}".format(source_path))
         # Check if file is already present at the target.
         # If it is, return
-        destination = os.path.join(manifest_entry["file_path"], manifest_entry["file_name"])
-        if os.path.exists(destination):
+        target_manifest = manifest_entry["target"]
+        destination = os.path.join(base_path, target_manifest["path"], target_manifest["name"])
+        if os.path.isfile(destination):
+            log.info("[ ] File {} already exists at {}".format(source_path, destination))
             return True
         else:
             try:
-                shutil.copy(file_path, destination)
-                return True
+                if os.path.isfile(source_path):
+                    self.create_directory(os.path.join(base_path, target_manifest["path"]))
+                    shutil.copy(source_path, destination)
+                    log.info("[*] File {} copied to {}".format(source_path, destination))
+                    return True
+                else:
+                    log.info("[*] File {} not found at source".format(source_path))
             except Exception as e:
-                log.error("Exception copying {}: {}".format(file_path, e))
+                log.warn("[!] Exception copying {} to {}: {}".format(source_path, destination, e))
                 return False
 
     def process_file(self, _file, destination, media, manifest, **kwargs):

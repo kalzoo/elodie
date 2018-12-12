@@ -36,7 +36,7 @@ from elodie.external.pyexiftool import ExifTool
 FILESYSTEM = FileSystem()
 
 
-def import_file(file_path, target_config, manifest, metadata_dict, dryrun=False):
+def import_file(file_path, config, manifest, metadata_dict, dryrun=False):
 
     """Set file metadata and move it to destination.
     """
@@ -45,6 +45,9 @@ def import_file(file_path, target_config, manifest, metadata_dict, dryrun=False)
         print('{"source":"%s", "error_msg":"Could not find %s"}' % \
             (file_path, file_path))
         return
+
+    target = config["targets"][0]
+    target_base_path = target["base_path"]
 
     # Check if the source, _file, is a child folder within destination
     #   .... this is not the right time to be checking for that. Lots of unnecessary checks
@@ -62,13 +65,13 @@ def import_file(file_path, target_config, manifest, metadata_dict, dryrun=False)
     # if album_from_folder:
     #     media.set_album_from_folder()
 
-    manifest_entry = FILESYSTEM.generate_manifest(file_path, target_config, metadata_dict, media)
+    manifest_entry = FILESYSTEM.generate_manifest(file_path, target, metadata_dict, media)
     manifest.merge({manifest.checksum(file_path): manifest_entry})
 
     if dryrun:
         return manifest_entry is not None
     else:
-        result = FILESYSTEM.execute_manifest(file_path, manifest_entry, manifest, media)
+        result = FILESYSTEM.execute_manifest(file_path, manifest_entry, target_base_path)
         # if dest_path:
         #     print('%s -> %s' % (_file, dest_path))
         # if trash:
@@ -124,7 +127,7 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug)
 
     # This might not go well for huge directory scrapes. Will have to figure out how to batch it.
     # can use itertools.islice(generator, N) to get the next N entries.
-    # TODO Next: (Working here): minor rewrite to use this^ to
+    # TODO Next: (Working here): minor rewrite to use this^ to  prevent crashing on my HD
     all_files = list(FILESYSTEM.get_all_files(source_file_path, None))
     with ExifTool(addedargs=exiftool_addedargs) as et:
         metadata_list = et.get_metadata_batch(all_files)
@@ -137,7 +140,7 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug)
 
     # Improvement over upstream: uses the generator created by Filesystem to reduce memory consumption
     for current_file in FILESYSTEM.get_all_files(source_file_path, None):
-        result = import_file(current_file, target, manifest, metadata_dict, dryrun)
+        result = import_file(current_file, config, manifest, metadata_dict, dryrun)
         has_errors = has_errors or not result
 
 
