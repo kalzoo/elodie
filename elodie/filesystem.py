@@ -6,6 +6,7 @@ General file system methods.
 from __future__ import print_function
 from builtins import object
 
+import hashlib
 import os
 import re
 import shutil
@@ -17,6 +18,29 @@ from elodie import log
 # from elodie.config import load_config
 from elodie.manifest import Manifest
 from elodie.media.base import Base, get_all_subclasses
+
+
+# For some reason, this was an instance method on Db/manifest.
+# TODO: should be a utility or class method somewhere.
+def checksum(file_path, blocksize=65536):
+    """Create a hash value for the given file.
+
+    See http://stackoverflow.com/a/3431835/1318758.
+
+    :param str file_path: Path to the file to create a hash for.
+    :param int blocksize: Read blocks of this size from the file when
+        creating the hash.
+    :returns: str or None
+    """
+    hasher = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        buf = f.read(blocksize)
+
+        while len(buf) > 0:
+            hasher.update(buf)
+            buf = f.read(blocksize)
+        return hasher.hexdigest()
+    return None
 
 
 class FileSystem(object):
@@ -292,8 +316,21 @@ class FileSystem(object):
         # If it is, return
         target_manifest = manifest_entry["target"]
         destination = os.path.join(base_path, target_manifest["path"], target_manifest["name"])
+        # If there's already a file there...
         if os.path.isfile(destination):
-            log.info("[ ] File {} already exists at {}".format(source_path, destination))
+            # Check that it's the same file. situations: a) edited but kept same name, b) corrupted
+            if checksum(destination) == checksum(source_path):
+                log.info("[ ] File {} already exists at {} and is intact; skipping".format(source_path, destination))
+            else:
+                target_name, target_ext = os.path.splitext(target_manifest["name"])
+                target_name_with_hash = ''.join([target_name, '.', checksum(source_path), target_ext])
+                destination_name_with_hash = os.path.join(base_path, target_manifest["path"], target_name_with_hash)
+                shutil.copy(source_path, destination_name_with_hash)
+                log.info("[ ] File {} already exists at {} but is corrupt or edited; copying with hash: {}".format(
+                    source_path,
+                    destination,
+                    target_name_with_hash
+                ))
             return True
         else:
             try:
