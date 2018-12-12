@@ -24,7 +24,7 @@ script_directory = path.dirname(path.dirname(path.abspath(__file__)))
 exiftool_config = path.join(script_directory, 'configs', 'ExifTool_config')
 
 # How many files to read into ExifTool batch mode at once. Larger batches == faster import, more memory consumption
-exiftool_batch_size = 50
+exiftool_batch_size = 100
 
 #: Accepted language in responses from MapQuest
 accepted_language = 'en'

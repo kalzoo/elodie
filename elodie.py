@@ -4,6 +4,7 @@ import itertools
 import os
 import re
 import sys
+import time
 from datetime import datetime
 
 import click
@@ -110,6 +111,8 @@ def import_file(file_path, config, manifest, metadata_dict, allow_duplicates=Fal
 def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug, indent_manifest=False, overwrite_manifest=False):
     """Import files or directories by reading their EXIF and organizing them accordingly.
     """
+    start_time = round(time.time())
+
     constants.debug = debug
     has_errors = False
     result = Result()
@@ -145,33 +148,38 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
     file_generator = FILESYSTEM.get_all_files(source_file_path, None)
     source_file_count = 0
 
-    while True:
-        file_batch = list(itertools.islice(file_generator, constants.exiftool_batch_size))
-        if len(file_batch) == 0: break
-        source_file_count += len(file_batch)
-        with ExifTool(addedargs=exiftool_addedargs) as et:
+    with ExifTool(addedargs=exiftool_addedargs) as et:
+        while True:
+            file_batch = list(itertools.islice(file_generator, constants.exiftool_batch_size))
+            if len(file_batch) == 0: break
+            source_file_count += len(file_batch)
             metadata_list = et.get_metadata_batch(file_batch)
             if not metadata_list:
                 raise Exception("Metadata scrape failed.")
             # Key on the filename to make for easy access,
             metadata_dict = dict((os.path.abspath(el["SourceFile"]), el) for el in metadata_list)
-        for current_file in file_batch:
-            try:
-                result = import_file(current_file, config, manifest, metadata_dict, dryrun=dryrun, allow_duplicates=allow_duplicates)
-            except Exception as e:
-                log.warn("[!] Error importing {}: {}".format(current_file, e))
-                result = False
-            has_errors = has_errors or not result
+            for current_file in file_batch:
+                try:
+                    result = import_file(current_file, config, manifest, metadata_dict, dryrun=dryrun, allow_duplicates=allow_duplicates)
+                except Exception as e:
+                    log.warn("[!] Error importing {}: {}".format(current_file, e))
+                    result = False
+                has_errors = has_errors or not result
+        exiftool_waiting_time = et.waiting_time
 
     manifest.write(indent=indent_manifest, overwrite=overwrite_manifest)
 
     manifest_key_count = len(manifest)
 
     try:
+        total_time = round(time.time() - start_time)
         print("Statistics:")
         print("Source: File Count {}".format(source_file_count))
         print("Manifest: New Hashes {}".format(manifest_key_count - original_manifest_key_count))
         print("Manifest: Total Hashes {}".format(manifest_key_count))
+        print("Time: Total {}s".format(total_time))
+        print("Time: Files/sec {}".format(round(source_file_count / total_time)))
+        print("Time: Waiting on ExifTool {}s".format(round(exiftool_waiting_time)))
     except Exception as e:
         log.error("[!] Error generating statistics: {}".format(e))
 

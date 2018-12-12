@@ -60,6 +60,7 @@ from __future__ import unicode_literals
 import sys
 import subprocess
 import os
+import time
 import json
 import warnings
 import logging
@@ -206,6 +207,7 @@ class ExifTool(object):
             raise TypeError("addedargs not a list of strings")
         
         self.running = False
+        self.waiting_time = 0
 
     def start(self):
         """Start an ``exiftool`` process in batch mode for this instance.
@@ -271,6 +273,7 @@ class ExifTool(object):
         .. note:: This is considered a low-level method, and should
            rarely be needed by application developers.
         """
+        start_time = time.time()
         if not self.running:
             raise ValueError("ExifTool instance not running.")
         self._process.stdin.write(b"\n".join(params + (b"-execute\n",)))
@@ -279,7 +282,9 @@ class ExifTool(object):
         fd = self._process.stdout.fileno()
         while not output[-32:].strip().endswith(sentinel):
             output += os.read(fd, block_size)
-        return output.strip()[:-len(sentinel)]
+        result = output.strip()[:-len(sentinel)]
+        self.waiting_time += (time.time() - start_time)
+        return result
 
     def execute_json(self, *params):
         """Execute the given batch of parameters and parse the JSON output.
