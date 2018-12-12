@@ -56,15 +56,22 @@ class Manifest(object):
         self.entries = deep_merge(self.entries, manifest_entry)
 
     # TODO: Cut out any date that's already there
-    def write(self):
+    def write(self, indent=False, overwrite=False):
+        file_path, file_name = os.path.split(self.file_path)
         file_path, file_name = os.path.split(self.file_path)
         name, ext = os.path.splitext(file_name)
 
-        write_name = "{}{}".format('_'.join([name, datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')]), ext)
-        write_path = os.path.join(file_path, write_name)
+        if overwrite and self.file_path is not None:
+            write_path = self.file_path
+        else:
+            write_name = "{}{}".format('_'.join([name, datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')]), ext)
+            write_path = os.path.join(file_path, write_name)
         print("Writing manifest to {}".format(write_path))
         with open(write_path, 'w') as f:
-            json.dump(self.entries, f, separators=(',', ':'))
+            if indent:
+                json.dump(self.entries, f, indent=2, separators=(',', ': '))
+            else:
+                json.dump(self.entries, f, separators=(',', ':'))
         print("Manifest written.")
 
     def add_hash(self, key, value, write=False):

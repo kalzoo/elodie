@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import json
+import itertools
 import os
 import re
 import sys
@@ -87,6 +87,10 @@ def import_file(file_path, config, manifest, metadata_dict, dryrun=False):
               required=True, help='Import configuration file.')
 @click.option('-m', '--manifest', 'manifest_path', type=click.Path(file_okay=True),
               help='The database/manifest used to store file sync information.')
+@click.option('-i', '--indent-manifest', 'indent_manifest', is_flag=True,
+              help='Whether to indent the manifest for easier reading (roughly doubles file size)')
+@click.option('--overwrite-manifest', 'overwrite_manifest', is_flag=True,
+              help='Whether to overwrite the input manifest (not recommended for safety)')
 # @click.option('--trash', default=False, is_flag=True,
 #               help='After copying files, move the old files to the trash.')
 @click.option('--allow-duplicates', default=False, is_flag=True,
@@ -96,7 +100,7 @@ def import_file(file_path, config, manifest, metadata_dict, dryrun=False):
 @click.option('--debug', default=False, is_flag=True,
               help='Override the value in constants.py with True.')
 # @click.argument('paths', nargs=-1, type=click.Path())
-def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug):
+def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug, indent_manifest=False, overwrite_manifest=False):
     """Import files or directories by reading their EXIF and organizing them accordingly.
     """
     constants.debug = debug
@@ -128,23 +132,23 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug)
     # This might not go well for huge directory scrapes. Will have to figure out how to batch it.
     # can use itertools.islice(generator, N) to get the next N entries.
     # TODO Next: (Working here): minor rewrite to use this^ to  prevent crashing on my HD
-    all_files = list(FILESYSTEM.get_all_files(source_file_path, None))
-    with ExifTool(addedargs=exiftool_addedargs) as et:
-        metadata_list = et.get_metadata_batch(all_files)
-        if not metadata_list:
-            raise Exception("Metadata scrape failed.")
-        # Key on the filename to make for easy access,
-        metadata_dict = dict((os.path.abspath(el["SourceFile"]), el) for el in metadata_list)
 
-    # print(json.dumps(metadata_dict, indent=2))
+    file_generator = FILESYSTEM.get_all_files(source_file_path, None)
 
-    # Improvement over upstream: uses the generator created by Filesystem to reduce memory consumption
-    for current_file in FILESYSTEM.get_all_files(source_file_path, None):
-        result = import_file(current_file, config, manifest, metadata_dict, dryrun)
-        has_errors = has_errors or not result
+    while True:
+        file_batch = list(itertools.islice(file_generator, constants.exiftool_batch_size))
+        if len(file_batch) == 0: break
+        with ExifTool(addedargs=exiftool_addedargs) as et:
+            metadata_list = et.get_metadata_batch(file_batch)
+            if not metadata_list:
+                raise Exception("Metadata scrape failed.")
+            # Key on the filename to make for easy access,
+            metadata_dict = dict((os.path.abspath(el["SourceFile"]), el) for el in metadata_list)
+        for current_file in file_batch:
+            result = import_file(current_file, config, manifest, metadata_dict, dryrun)
+            has_errors = has_errors or not result
 
-
-    manifest.write()  # Writes it to a timestamped file in the same directory as the original
+    manifest.write(indent=indent_manifest, overwrite=overwrite_manifest)  # Writes it to a timestamped file in the same directory as the original
 
     if has_errors:
         sys.exit(1)
