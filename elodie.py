@@ -133,7 +133,7 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug)
         # Key on the filename to make for easy access,
         metadata_dict = dict((os.path.abspath(el["SourceFile"]), el) for el in metadata_list)
 
-    print(json.dumps(metadata_dict, indent=2))
+    # print(json.dumps(metadata_dict, indent=2))
 
     # Improvement over upstream: uses the generator created by Filesystem to reduce memory consumption
     for current_file in FILESYSTEM.get_all_files(source_file_path, None):

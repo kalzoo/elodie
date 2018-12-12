@@ -147,11 +147,13 @@ class FileSystem(object):
         if metadata['date_taken'] is not None:
             file_name_parts.append(time.strftime('%Y-%m-%d_%H-%M-%S', metadata['date_taken']))
 
-        if metadata.get("origin", None) is not None:
+        if metadata["origin"] is not None:
             file_name_parts.append(metadata['origin'])
+        # Alternative: the camera model could be the origin - but that would add a lot of repetitive data to the manifest
+        elif metadata["camera_model"] is not None:
+            file_name_parts.append(metadata['camera_model'])
 
         file_name_parts.append(base_name)
-        file_name_parts
 
         return "{}.{}".format('-'.join(file_name_parts), metadata['extension']).lower()
 
@@ -259,12 +261,25 @@ class FileSystem(object):
     def generate_manifest(self, file_path, target_config, metadata_dict, media):
         log.info("Generating manifest: {}".format(file_path))
         metadata = media.get_metadata(metadata_dict)
-        target_manifest = metadata.copy()
+        metadata_entry = {
+            "sources": {
+                file_path: {}
+            },
+            "target": {
+                "path": self.get_folder_path(metadata, target_config),
+                "name": self.get_file_name(metadata, target_config)
+            },
+        }
 
-        target_manifest["file_path"] = self.get_folder_path(metadata, target_config)
-        target_manifest["file_name"] = self.get_file_name(metadata, target_config)
+        # Don't include null values (significantly reduces size of manifest)
+        if metadata["date_taken"] is not None: metadata_entry["sources"][file_path]["date_taken"] = metadata["date_taken"],
+        if metadata["camera_make"] is not None: metadata_entry["sources"][file_path]["camera_make"] = metadata["camera_make"]
+        if metadata["camera_model"] is not None: metadata_entry["sources"][file_path]["camera_model"] = metadata["camera_model"]
+        if metadata["album"] is not None: metadata_entry["sources"][file_path]["album"] = metadata["album"]
+        if metadata["title"] is not None: metadata_entry["sources"][file_path]["title"] = metadata["title"]
+        if metadata["origin"] is not None: metadata_entry["sources"][file_path]["origin"] = metadata["origin"]
 
-        return {"targets": [target_manifest]}
+        return metadata_entry
 
     def execute_manifest(self, file_path, manifest_entry):
         log.info("executing manifest: {}".format(file_path))

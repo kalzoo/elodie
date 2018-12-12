@@ -12,6 +12,7 @@ are used to represent the actual files.
 
 import mimetypes
 import os
+import re
 
 try:        # Py3k compatibility
     basestring
@@ -107,7 +108,8 @@ class Base(object):
             'original_name': self.get_original_name(),
             'base_name': os.path.splitext(os.path.basename(source))[0],
             'extension': self.get_extension(),
-            'directory_path': os.path.dirname(source)
+            'directory_path': os.path.dirname(source),
+            'origin': self.get_origin()
         }
 
         return self.metadata
@@ -126,6 +128,17 @@ class Base(object):
             return None
 
         return mimetype[0]
+
+    # The origin of a file is any user-set attribute, like who it's from or metadata that's not in exif, like "film"
+    # the 'origin' of a file can be set via its direct parent directory, named origin$whatever
+    def get_origin(self):
+        path, _ = os.path.split(self.source)
+        _, top_directory = os.path.split(path)
+        match = re.match('^origin\$(.+)', top_directory)
+        if match:
+            return match[1]
+        else:
+            return None
 
     def get_original_name(self):
         """Get the original name of the file from before it was imported.

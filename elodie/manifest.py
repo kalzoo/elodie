@@ -9,8 +9,7 @@ from datetime import datetime
 import hashlib
 import json
 import os
-import re
-import sys
+import time
 
 from math import radians, cos, sqrt
 from shutil import copyfile
@@ -60,11 +59,12 @@ class Manifest(object):
     def write(self):
         file_path, file_name = os.path.split(self.file_path)
         name, ext = os.path.splitext(file_name)
-        write_name = re.sub(":", "", "{}{}".format('_'.join([name, datetime.utcnow().isoformat()]), ext))
+
+        write_name = "{}{}".format('_'.join([name, datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')]), ext)
         write_path = os.path.join(file_path, write_name)
         print("Writing manifest to {}".format(write_path))
         with open(write_path, 'w') as f:
-            json.dump(self.entries, f, indent=2)
+            json.dump(self.entries, f, separators=(',', ':'))
         print("Manifest written.")
 
     def add_hash(self, key, value, write=False):
