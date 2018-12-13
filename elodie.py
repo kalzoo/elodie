@@ -97,8 +97,8 @@ def import_file(file_path, config, manifest, metadata_dict, allow_duplicates=Fal
               help='The database/manifest used to store file sync information.')
 @click.option('-i', '--indent-manifest', 'indent_manifest', is_flag=True,
               help='Whether to indent the manifest for easier reading (roughly doubles file size)')
-@click.option('--overwrite-manifest', 'overwrite_manifest', is_flag=True,
-              help='Whether to overwrite the input manifest (not recommended for safety)')
+@click.option('--no-overwrite-manifest', 'no_overwrite_manifest', is_flag=True,
+              help='Whether to overwrite the input manifest (default is overwrite)')
 # @click.option('--trash', default=False, is_flag=True,
 #               help='After copying files, move the old files to the trash.')
 @click.option('--allow-duplicates', default=False, is_flag=True,
@@ -108,7 +108,7 @@ def import_file(file_path, config, manifest, metadata_dict, allow_duplicates=Fal
 @click.option('--debug', default=False, is_flag=True,
               help='Override the value in constants.py with True.')
 # @click.argument('paths', nargs=-1, type=click.Path())
-def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug, indent_manifest=False, overwrite_manifest=False):
+def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug, indent_manifest=False, no_overwrite_manifest=False):
     """Import files or directories by reading their EXIF and organizing them accordingly.
     """
     start_time = round(time.time())
@@ -170,7 +170,7 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
                 has_errors = has_errors or not result
         exiftool_waiting_time = et.waiting_time
 
-    manifest.write(indent=indent_manifest, overwrite=overwrite_manifest)
+    manifest.write(indent=indent_manifest, overwrite=(not no_overwrite_manifest))
 
     manifest_key_count = len(manifest)
 

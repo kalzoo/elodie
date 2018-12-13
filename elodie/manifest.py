@@ -16,6 +16,7 @@ from shutil import copyfile
 from time import strftime
 
 from elodie import constants
+from elodie import filesystem
 
 
 # https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
@@ -57,18 +58,24 @@ class Manifest(object):
         self.entries = deep_merge(self.entries, manifest_entry)
 
     # TODO: Cut out any date that's already there
-    def write(self, indent=False, overwrite=False):
+    def write(self, indent=False, overwrite=True):
         file_path, file_name = os.path.split(self.file_path)
         file_path, file_name = os.path.split(self.file_path)
         name, ext = os.path.splitext(file_name)
 
-        if overwrite and self.file_path is not None:
-            write_path = self.file_path
-        else:
-            write_name = "{}{}".format('_'.join([name, datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')]), ext)
-            write_path = os.path.join(file_path, write_name)
-        print("Writing manifest to {}".format(write_path))
+        filesystem.FileSystem().create_directory(os.path.join(file_path, '.manifest_history'))
+
+        write_name = "{}{}".format('_'.join([name, datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')]), ext)
+        # TODO: check to see if you're already in a manifest_history directory, so as to not nest another one
+        write_path = os.path.join(file_path, '.manifest_history', write_name)
+
+        print("Writing manifest to {} and {}".format(self.file_path, write_path))
         with open(write_path, 'w') as f:
+            if indent:
+                json.dump(self.entries, f, indent=2, separators=(',', ': '))
+            else:
+                json.dump(self.entries, f, separators=(',', ':'))
+        with open(self.file_path, 'w') as f:
             if indent:
                 json.dump(self.entries, f, indent=2, separators=(',', ': '))
             else:
