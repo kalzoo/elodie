@@ -46,7 +46,8 @@ class Manifest(object):
 
         if not os.path.isfile(file_path):
             print("Specified manifest file does not exist, creating")
-            with open(file_path, 'a'):
+            with open(file_path, 'a') as f:
+                json.dump({}, f)
                 os.utime(file_path, None)
 
         with open(file_path, 'r') as f:

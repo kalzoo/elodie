@@ -10,9 +10,12 @@ are used to represent the actual files.
 .. moduleauthor:: Jaisen Mathai <jaisen@jmathai.com>
 """
 
+import json
 import mimetypes
 import os
 import re
+
+from elodie import log
 
 try:        # Py3k compatibility
     basestring
@@ -78,7 +81,21 @@ class Base(object):
     def get_camera_model(self):
         return None
 
-    def get_metadata(self, metadata_dict, update_cache=False):
+    # If there is an elodie.json in a directory, load its contents
+    def get_local_metadata(self):
+        directory, _ = os.path.split(self.source)
+        local_config_path = os.path.join(directory, 'elodie.json')
+        if os.path.isfile(local_config_path):
+            try:
+                with open(local_config_path) as f:
+                    return json.load(f)
+            except:
+                log.error("Failed to read metadata from {}".format(local_config_path))
+                return {}
+        else:
+            return {}
+
+    def get_metadata(self, exif_metadata, update_cache=False):
         """Get a dictionary of metadata for any file.
 
         All keys will be present and have a value of None if not obtained.
@@ -94,8 +111,8 @@ class Base(object):
         # Check the batch-retrieved attributes and see if the metadata is there.
         #   If present, memoize it to the same property as the exiftool fetcher to prevent refetch
         #   and enable all the get_*() methods.
-        if metadata_dict is not None and self.source in metadata_dict:
-            self.exif_metadata = metadata_dict[self.source]
+        if exif_metadata is not None and self.source in exif_metadata:
+            self.exif_metadata = exif_metadata[self.source]
 
         source = self.source
 
@@ -112,8 +129,10 @@ class Base(object):
             'base_name': os.path.splitext(os.path.basename(source))[0],
             'extension': self.get_extension(),
             'directory_path': os.path.dirname(source),
-            'origin': self.get_origin()
+            'origin': None # This is now only retrieved from the directory-local elodie.json (see get_local_metadata)
         }
+
+        self.metadata.update(self.get_local_metadata())
 
         return self.metadata
 

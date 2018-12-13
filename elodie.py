@@ -159,6 +159,9 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
             # Key on the filename to make for easy access,
             metadata_dict = dict((os.path.abspath(el["SourceFile"]), el) for el in metadata_list)
             for current_file in file_batch:
+                # Don't import localized config files.
+                if current_file.endswith("elodie.json"):  # Faster than a os.path.split
+                    continue
                 try:
                     result = import_file(current_file, config, manifest, metadata_dict, dryrun=dryrun, allow_duplicates=allow_duplicates)
                 except Exception as e:
@@ -185,6 +188,17 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
 
     if has_errors:
         sys.exit(1)
+
+
+@click.command('analyze')
+@click.option('-m', '--manifest', 'manifest_path', type=click.Path(file_okay=True),
+              help='The database/manifest used to store file sync information.')
+def _analyze(manifest_path):
+    manifest = Manifest()
+    manifest.load_from_file(manifest_path)
+    manifest_key_count = len(manifest)
+    print("Statistics:")
+    print("Manifest: Total Hashes {}".format(manifest_key_count))
 
 
 @click.command('generate-db')
@@ -400,6 +414,7 @@ def main():
     pass
 
 
+main.add_command(_analyze)
 main.add_command(_import)
 main.add_command(_update)
 main.add_command(_generate_db)
