@@ -17,6 +17,7 @@ from time import strftime
 
 from elodie import constants
 from elodie import filesystem
+from elodie import log
 
 
 # https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
@@ -46,41 +47,49 @@ class Manifest(object):
         self.file_path = file_path  # To allow re-saving afterwards
 
         if not os.path.isfile(file_path):
-            print("Specified manifest file does not exist, creating")
+            log.info("Specified manifest file {} does not exist, creating...".format(file_path))
             with open(file_path, 'a') as f:
                 json.dump({}, f)
                 os.utime(file_path, None)
 
+        log.info("[ ] Loading from {}...".format(file_path))
         with open(file_path, 'r') as f:
-            self.entries = json.load(f)
+            self.merge(json.load(f))
+        log.info("[*] Load complete.".format(file_path))
 
     def merge(self, manifest_entry):
         self.entries = deep_merge(self.entries, manifest_entry)
 
     # TODO: Cut out any date that's already there
-    def write(self, indent=False, overwrite=True):
-        file_path, file_name = os.path.split(self.file_path)
+    def write(self, write_path=None, indent=False, overwrite=True):
         file_path, file_name = os.path.split(self.file_path)
         name, ext = os.path.splitext(file_name)
 
-        filesystem.FileSystem().create_directory(os.path.join(file_path, '.manifest_history'))
+        if write_path is None:
+            filesystem.FileSystem().create_directory(os.path.join(file_path, '.manifest_history'))
 
-        write_name = "{}{}".format('_'.join([name, datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')]), ext)
-        # TODO: check to see if you're already in a manifest_history directory, so as to not nest another one
-        write_path = os.path.join(file_path, '.manifest_history', write_name)
+            write_name = "{}{}".format('_'.join([name, datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')]), ext)
+            # TODO: check to see if you're already in a manifest_history directory, so as to not nest another one
+            write_path = os.path.join(file_path, '.manifest_history', write_name)
 
-        print("Writing manifest to {} and {}".format(self.file_path, write_path))
+            if overwrite is True and os.path.exists(self.file_path):
+                log.info("Writing manifest to {}".format(self.file_path))
+                with open(self.file_path, 'w') as f:
+                    if indent:
+                        json.dump(self.entries, f, indent=2, separators=(',', ': '))
+                    else:
+                        json.dump(self.entries, f, separators=(',', ':'))
+            else:
+                log.warn("Not overwriting manifest at {}".format(self.file_path))
+
+        log.info("Writing manifest to {}".format(write_path))
         with open(write_path, 'w') as f:
             if indent:
                 json.dump(self.entries, f, indent=2, separators=(',', ': '))
             else:
                 json.dump(self.entries, f, separators=(',', ':'))
-        with open(self.file_path, 'w') as f:
-            if indent:
-                json.dump(self.entries, f, indent=2, separators=(',', ': '))
-            else:
-                json.dump(self.entries, f, separators=(',', ':'))
-        print("Manifest written.")
+
+        log.info("Manifest written.")
 
     def __len__(self):
         return len(self.entries)

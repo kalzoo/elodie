@@ -25,7 +25,11 @@ class Text(Base):
     __name__ = 'Text'
 
     #: Valid extensions for text files.
-    extensions = ('txt',)
+    # extensions = ('txt',)
+
+    # Disabling this class for the time being because I'd rather it's treated as Base class.
+    # Not sure why TXT files should be considered special.
+    extensions = ()
 
     def __init__(self, source=None):
         super(Text, self).__init__(source)
@@ -68,9 +72,10 @@ class Text(Base):
         )
         return time.gmtime(seconds_since_epoch)
 
-    def get_metadata(self):
-        self.parse_metadata_line()
-        return super(Text, self).get_metadata()
+    # This sends the wrong number of arguments to the base class, and I'm not sure why it's necessary
+    # def get_metadata(self):
+    #     self.parse_metadata_line()
+    #     return super(Text, self).get_metadata()
 
     def get_original_name(self):
         self.parse_metadata_line()

@@ -19,6 +19,7 @@ if not verify_dependencies():
 from elodie.config import Config
 from elodie import constants
 from elodie import log
+from elodie import utility
 from elodie.compatability import _decode
 from elodie.filesystem import FileSystem
 from elodie.manifest import Manifest
@@ -43,8 +44,6 @@ def import_file(file_path, config, manifest, metadata_dict, allow_duplicates=Fal
     """
     if not os.path.exists(file_path):
         log.warn('Could not find %s' % file_path)
-        print('{"source":"%s", "error_msg":"Could not find %s"}' % \
-            (file_path, file_path))
         return
 
     target = config["targets"][0]
@@ -60,20 +59,21 @@ def import_file(file_path, config, manifest, metadata_dict, allow_duplicates=Fal
     media = Media.get_class_by_file(file_path, get_all_subclasses())
     if not media:
         log.warn('Not a supported file (%s)' % file_path)
-        print('{"source":"%s", "error_msg":"Not a supported file"}' % file_path)
         return
 
     # if album_from_folder:
     #     media.set_album_from_folder()
 
     checksum = manifest.checksum(file_path)
+    is_duplicate = (checksum in manifest.entries)
 
-    if not allow_duplicates and checksum in manifest.entries:
-        log.info("[ ] File {} already present in manifest; allow_duplicates is false; skipping".format(file_path))
+    # Merge it into the manifest regardless of duplicate entries, to record all sources for a given file
+    manifest_entry = FILESYSTEM.generate_manifest(file_path, target, metadata_dict, media)
+    manifest.merge({checksum: manifest_entry})
+
+    if (not allow_duplicates) and is_duplicate:
+        log.debug("[ ] File {} already present in manifest; allow_duplicates is false; skipping".format(file_path))
         return True
-    else:
-        manifest_entry = FILESYSTEM.generate_manifest(file_path, target, metadata_dict, media)
-        manifest.merge({checksum: manifest_entry})
 
     if dryrun:
         log.info("Generated manifest: {}".format(file_path))
@@ -141,10 +141,6 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
         u'"{}"'.format(constants.exiftool_config)
     ]
 
-    # This might not go well for huge directory scrapes. Will have to figure out how to batch it.
-    # can use itertools.islice(generator, N) to get the next N entries.
-    # TODO Next: (Working here): minor rewrite to use this^ to  prevent crashing on my HD
-
     file_generator = FILESYSTEM.get_all_files(source_file_path, None)
     source_file_count = 0
 
@@ -152,6 +148,9 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
         while True:
             file_batch = list(itertools.islice(file_generator, constants.exiftool_batch_size))
             if len(file_batch) == 0: break
+
+            # This will cause slight discrepancies in file counts: since elodie.json is counted but not imported,
+            #   each one will set the count off by one.
             source_file_count += len(file_batch)
             metadata_list = et.get_metadata_batch(file_batch)
             if not metadata_list:
@@ -176,29 +175,70 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
 
     try:
         total_time = round(time.time() - start_time)
-        print("Statistics:")
-        print("Source: File Count {}".format(source_file_count))
-        print("Manifest: New Hashes {}".format(manifest_key_count - original_manifest_key_count))
-        print("Manifest: Total Hashes {}".format(manifest_key_count))
-        print("Time: Total {}s".format(total_time))
-        print("Time: Files/sec {}".format(round(source_file_count / total_time)))
-        print("Time: Waiting on ExifTool {}s".format(round(exiftool_waiting_time)))
+        log.info("Statistics:")
+        log.info("Source: File Count {}".format(source_file_count))
+        log.info("Manifest: New Hashes {}".format(manifest_key_count - original_manifest_key_count))
+        log.info("Manifest: Total Hashes {}".format(manifest_key_count))
+        log.info("Time: Total {}s".format(total_time))
+        log.info("Time: Files/sec {}".format(round(source_file_count / total_time)))
+        log.info("Time: Waiting on ExifTool {}s".format(round(exiftool_waiting_time)))
     except Exception as e:
         log.error("[!] Error generating statistics: {}".format(e))
+
+    log_base_path, _ = os.path.split(manifest.file_path)
+    FILESYSTEM.create_directory(os.path.join(log_base_path, '.elodie'))
+    log.write(os.path.join(log_base_path, '.elodie', 'import_{}.log'.format(utility.timestamp_string())))
 
     if has_errors:
         sys.exit(1)
 
 
 @click.command('analyze')
-@click.option('-m', '--manifest', 'manifest_path', type=click.Path(file_okay=True),
-              help='The database/manifest used to store file sync information.')
-def _analyze(manifest_path):
+@click.option('--debug', default=False, is_flag=True,
+              help='Override the value in constants.py with True.')
+@click.argument('manifest_path', nargs=1, required=True)
+def _analyze(manifest_path, debug):
+    constants.debug = debug
+
     manifest = Manifest()
     manifest.load_from_file(manifest_path)
     manifest_key_count = len(manifest)
-    print("Statistics:")
-    print("Manifest: Total Hashes {}".format(manifest_key_count))
+
+    duplicate_source_file_count = {}
+
+    # Could be made into a reduce, but I want more functionality here ( ie a list of the duplicated files )
+    for k, v in manifest.entries.items():
+        if len(v["sources"]) > 1:
+            length = len(v["sources"])
+            if length in duplicate_source_file_count:
+                duplicate_source_file_count[length] += 1
+            else:
+                duplicate_source_file_count[length] = 1
+
+    log.info("Statistics:")
+    log.info("Manifest: Total Hashes {}".format(manifest_key_count))
+    for k, v in duplicate_source_file_count.items():
+        log.info("Manifest: Duplicate (x{}) Source Files {}".format(k, v))
+
+
+@click.command('merge')
+@click.option('-o', '--output', 'output_path', type=click.Path(file_okay=True),
+              required=True, help='The file path to save the merged manifest.')
+@click.argument('manifest_paths', nargs=-1, required=True)
+@click.option('--debug', default=False, is_flag=True,
+              help='Override the value in constants.py with True.')
+def _merge(manifest_paths, output_path, debug):
+    constants.debug = debug
+
+    manifest = Manifest()
+    for manifest_path in manifest_paths:
+        manifest.load_from_file(manifest_path)
+
+    manifest.write(output_path, overwrite=False)
+
+    manifest_key_count = len(manifest)
+    log.info("Statistics:")
+    log.info("Merged Manifest: Total Hashes {}".format(manifest_key_count))
 
 
 @click.command('generate-db')
@@ -266,7 +306,7 @@ def update_location(media, file_path, location_name):
             'latitude'], location_coords['longitude'])
         if not location_status:
             log.error('Failed to update location')
-            print(('{"source":"%s",' % file_path,
+            log.error(('{"source":"%s",' % file_path,
                 '"error_msg":"Failed to update location"}'))
             sys.exit(1)
     return True
@@ -281,7 +321,7 @@ def update_time(media, file_path, time_string):
     elif re.match(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}\d{2}$', time_string):
         msg = ('Invalid time format. Use YYYY-mm-dd hh:ii:ss or YYYY-mm-dd')
         log.error(msg)
-        print('{"source":"%s", "error_msg":"%s"}' % (file_path, msg))
+        log.error('{"source":"%s", "error_msg":"%s"}' % (file_path, msg))
         sys.exit(1)
 
     time = datetime.strptime(time_string, time_format)
@@ -321,7 +361,7 @@ def _update(album, location, time, title, paths, debug):
             has_errors = True
             result.append((current_file, False))
             log.warn('Could not find %s' % current_file)
-            print('{"source":"%s", "error_msg":"Could not find %s"}' % \
+            log.error('{"source":"%s", "error_msg":"Could not find %s"}' % \
                 (current_file, current_file))
             continue
 
@@ -389,7 +429,7 @@ def _update(album, location, time, title, paths, debug):
             dest_path = FILESYSTEM.process_file(current_file, destination,
                 updated_media, move=True, allowDuplicate=True)
             log.info(u'%s -> %s' % (current_file, dest_path))
-            print('{"source":"%s", "destination":"%s"}' % (current_file,
+            log.info('{"source":"%s", "destination":"%s"}' % (current_file,
                 dest_path))
             # If the folder we moved the file out of or its parent are empty
             # we delete it.
@@ -416,6 +456,7 @@ def main():
 
 main.add_command(_analyze)
 main.add_command(_import)
+main.add_command(_merge)
 main.add_command(_update)
 main.add_command(_generate_db)
 main.add_command(_verify)

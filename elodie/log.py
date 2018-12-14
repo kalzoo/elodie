@@ -10,6 +10,14 @@ from json import dumps
 from elodie import constants
 
 
+def debug(message):
+    _print_debug(message)
+
+
+def debug_json(payload):
+    _print_debug(dumps(payload))
+
+
 def info(message):
     _print(message)
 
@@ -42,5 +50,23 @@ def error_json(payload):
 
 
 def _print(string):
-    if(constants.debug is True):
+    print(string)
+    constants.log_output += string + '\n'
+
+
+def _print_debug(string):
+    if constants.debug is True:
         print(string)
+
+    constants.log_output += string + '\n'
+
+
+def write(path):
+    try:
+        with open(path, 'w') as f:
+            f.write(constants.log_output)
+        print("[*] Wrote log out to {}".format(path))
+        return True
+    except:
+        print("[!] Unable to write log out to {}".format(path))
+        return False
