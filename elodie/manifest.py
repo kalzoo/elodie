@@ -56,6 +56,7 @@ class Manifest(object):
         with open(file_path, 'r') as f:
             self.merge(json.load(f))
         log.info("[*] Load complete.".format(file_path))
+        return self # Allow chaining
 
     def merge(self, manifest_entry):
         self.entries = deep_merge(self.entries, manifest_entry)

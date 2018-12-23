@@ -320,12 +320,20 @@ class FileSystem(object):
         if os.path.isfile(destination):
             # Check that it's the same file. situations: a) edited but kept same name, b) corrupted
             if checksum(destination) == checksum(source_path):
-                log.debug("[ ] File {} already exists at {} and is intact; skipping".format(source_path, destination))
+                if os.path.getmtime(destination) == os.path.getmtime(source_path):
+                    log.debug("[ ] File {} already exists at {} and is intact, with metadata; skipping".format(source_path, destination))
+                else:
+                    log.debug(
+                        "[ ] File {} already exists at {} and is intact but is missing metadata; overwriting".format(
+                            source_path, destination
+                        ))
+                    self.create_directory(os.path.join(base_path, target_manifest["path"]))
+                    shutil.copy2(source_path, destination)
             else:
                 target_name, target_ext = os.path.splitext(target_manifest["name"])
                 target_name_with_hash = ''.join([target_name, '.', checksum(source_path), target_ext])
                 destination_name_with_hash = os.path.join(base_path, target_manifest["path"], target_name_with_hash)
-                shutil.copy(source_path, destination_name_with_hash)
+                shutil.copy2(source_path, destination_name_with_hash)
                 log.debug("[ ] File {} already exists at {} but is corrupt or edited; copying with hash: {}".format(
                     source_path,
                     destination,
@@ -336,7 +344,7 @@ class FileSystem(object):
             try:
                 if os.path.isfile(source_path):
                     self.create_directory(os.path.join(base_path, target_manifest["path"]))
-                    shutil.copy(source_path, destination)
+                    shutil.copy2(source_path, destination)
                     log.debug("[*] File {} copied to {}".format(source_path, destination))
                     return True
                 else:

@@ -66,6 +66,8 @@ import warnings
 import logging
 import codecs
 
+from elodie import log
+
 try:        # Py3k compatibility
     basestring
 except NameError:
@@ -283,7 +285,9 @@ class ExifTool(object):
         while not output[-32:].strip().endswith(sentinel):
             output += os.read(fd, block_size)
         result = output.strip()[:-len(sentinel)]
-        self.waiting_time += (time.time() - start_time)
+        waiting_time = (time.time() - start_time)
+        self.waiting_time += waiting_time
+        log.debug("[ ] Reading metadata took {} s".format(waiting_time))
         return result
 
     def execute_json(self, *params):

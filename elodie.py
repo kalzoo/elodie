@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
 import itertools
+import json
 import os
 import re
+import signal
 import sys
 import time
 from datetime import datetime
@@ -130,6 +132,17 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
     if manifest_path is not None:
         manifest.load_from_file(manifest_path)
 
+    log_base_path, _ = os.path.split(manifest.file_path)
+    FILESYSTEM.create_directory(os.path.join(log_base_path, '.elodie'))
+    log_path = os.path.join(log_base_path, '.elodie', 'import_{}.log'.format(utility.timestamp_string()))
+
+    def signal_handler(sig, frame):
+        log.warn('[ ] Import cancelled')
+        log.write(log_path)
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+
     original_manifest_key_count = len(manifest)
 
     # destination = _decode(destination)
@@ -185,9 +198,7 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
     except Exception as e:
         log.error("[!] Error generating statistics: {}".format(e))
 
-    log_base_path, _ = os.path.split(manifest.file_path)
-    FILESYSTEM.create_directory(os.path.join(log_base_path, '.elodie'))
-    log.write(os.path.join(log_base_path, '.elodie', 'import_{}.log'.format(utility.timestamp_string())))
+    log.write(log_path)
 
     if has_errors:
         sys.exit(1)
@@ -239,6 +250,19 @@ def _merge(manifest_paths, output_path, debug):
     manifest_key_count = len(manifest)
     log.info("Statistics:")
     log.info("Merged Manifest: Total Hashes {}".format(manifest_key_count))
+
+
+@click.command('find')
+@click.option('-m', '--manifest', 'manifest_path', type=click.Path(file_okay=True),
+              help='The database/manifest used to store file sync information.', required=True)
+@click.option('-t', '--target-file-name', 'target_file_name', help='the name of the target file')
+def _find(manifest_path, target_file_name):
+    manifest = Manifest().load_from_file(manifest_path)
+    for k, v in manifest.entries.items():
+        if v["target"]["name"] == target_file_name:
+            print("Hash {}".format(k))
+            print(json.dumps(v, indent=2))
+    print("Search complete.")
 
 
 @click.command('generate-db')
@@ -457,6 +481,7 @@ def main():
 main.add_command(_analyze)
 main.add_command(_import)
 main.add_command(_merge)
+main.add_command(_find)
 main.add_command(_update)
 main.add_command(_generate_db)
 main.add_command(_verify)
