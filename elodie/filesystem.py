@@ -311,7 +311,14 @@ class FileSystem(object):
         return metadata_entry
 
     # TODO: check that the file found at destination has the expected checksum
-    def execute_manifest(self, source_path, manifest_entry, base_path):
+    def execute_manifest(self, source_path, manifest_entry, base_path, move_not_copy=False):
+        if move_not_copy:
+          manipulate_file = shutil.move
+          manipulation = "moved"
+        else:
+          manipulate_file = shutil.copy2
+          manipulation = "copied"
+
         # Check if file is already present at the target.
         # If it is, return
         target_manifest = manifest_entry["target"]
@@ -328,12 +335,12 @@ class FileSystem(object):
                             source_path, destination
                         ))
                     self.create_directory(os.path.join(base_path, target_manifest["path"]))
-                    shutil.copy2(source_path, destination)
+                    manipulate_file(source_path, destination)
             else:
                 target_name, target_ext = os.path.splitext(target_manifest["name"])
                 target_name_with_hash = ''.join([target_name, '.', checksum(source_path), target_ext])
                 destination_name_with_hash = os.path.join(base_path, target_manifest["path"], target_name_with_hash)
-                shutil.copy2(source_path, destination_name_with_hash)
+                manipulate_file(source_path, destination_name_with_hash)
                 log.debug("[ ] File {} already exists at {} but is corrupt or edited; copying with hash: {}".format(
                     source_path,
                     destination,
@@ -344,13 +351,13 @@ class FileSystem(object):
             try:
                 if os.path.isfile(source_path):
                     self.create_directory(os.path.join(base_path, target_manifest["path"]))
-                    shutil.copy2(source_path, destination)
-                    log.debug("[*] File {} copied to {}".format(source_path, destination))
+                    manipulate_file(source_path, destination)
+                    log.debug("[*] File {} {} to {}".format(source_path, manipulation, destination))
                     return True
                 else:
-                    log.debug("[*] File {} not found at source".format(source_path))
+                    log.debug("[*] File not found at source, could not move/copy: {} ".format(source_path))
             except Exception as e:
-                log.warn("[!] Exception copying {} to {}: {}".format(source_path, destination, e))
+                log.warn("[!] Exception moving/copying {} to {}: {}".format(source_path, destination, e))
                 return False
 
     def process_file(self, _file, destination, media, manifest, **kwargs):

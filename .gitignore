@@ -11,4 +11,5 @@ build/**
 **/*.rw2
 .idea
 /venv
+/.vscode
 manifest*json

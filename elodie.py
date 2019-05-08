@@ -40,12 +40,12 @@ from elodie.external.pyexiftool import ExifTool
 FILESYSTEM = FileSystem()
 
 
-def import_file(file_path, config, manifest, metadata_dict, allow_duplicates=False, dryrun=False):
+def import_file(file_path, config, manifest, metadata_dict, move=False, allow_duplicates=False, dryrun=False):
 
     """Set file metadata and move it to destination.
     """
     if not os.path.exists(file_path):
-        log.warn('Could not find %s' % file_path)
+        log.warn('Import_file: Could not find %s' % file_path)
         return
 
     target = config["targets"][0]
@@ -81,7 +81,7 @@ def import_file(file_path, config, manifest, metadata_dict, allow_duplicates=Fal
         log.info("Generated manifest: {}".format(file_path))
         return manifest_entry is not None
     else:
-        result = FILESYSTEM.execute_manifest(file_path, manifest_entry, target_base_path)
+        result = FILESYSTEM.execute_manifest(file_path, manifest_entry, target_base_path, move_not_copy=move)
         # if dest_path:
         #     print('%s -> %s' % (_file, dest_path))
         # if trash:
@@ -105,12 +105,14 @@ def import_file(file_path, config, manifest, metadata_dict, allow_duplicates=Fal
 #               help='After copying files, move the old files to the trash.')
 @click.option('--allow-duplicates', default=False, is_flag=True,
               help='Import the file even if it\'s already been imported.')
+@click.option('--move', default=False, is_flag=True,
+              help='Move files rather than copying them. Faster within a drive.')
 @click.option('--dryrun', default=False, is_flag=True,
               help="Don't move files or save the manifest; just print the manifest to terminal")
 @click.option('--debug', default=False, is_flag=True,
               help='Override the value in constants.py with True.')
 # @click.argument('paths', nargs=-1, type=click.Path())
-def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug, indent_manifest=False, no_overwrite_manifest=False):
+def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug, move=False, indent_manifest=False, no_overwrite_manifest=False):
     """Import files or directories by reading their EXIF and organizing them accordingly.
     """
     start_time = round(time.time())
@@ -175,7 +177,7 @@ def _import(source, config_path, manifest_path, allow_duplicates, dryrun, debug,
                 if current_file.endswith("elodie.json"):  # Faster than a os.path.split
                     continue
                 try:
-                    result = import_file(current_file, config, manifest, metadata_dict, dryrun=dryrun, allow_duplicates=allow_duplicates)
+                    result = import_file(current_file, config, manifest, metadata_dict, move=move, dryrun=dryrun, allow_duplicates=allow_duplicates)
                 except Exception as e:
                     log.warn("[!] Error importing {}: {}".format(current_file, e))
                     result = False
